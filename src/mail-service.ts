@@ -1,0 +1,302 @@
+/**
+ * MailService: IMAP/SMTP operations.
+ *
+ * This is the layer that talks to the mail server. The MCP tools
+ * (in tools.ts) call this service. By separating concerns, we can:
+ *   - mock MailService in tests
+ *   - swap implementations (e.g. for OAuth2 providers)
+ *   - keep transport logic clean
+ */
+
+import { ImapFlow, type ImapFlowOptions } from "imapflow";
+import nodemailer, { type Transporter } from "nodemailer";
+import type { Logger } from "pino";
+import type { Config } from "./config.js";
+
+export interface EmailSummary {
+  uid: number;
+  subject: string | undefined;
+  from: string | undefined;
+  to: string | undefined;
+  date: string | undefined;
+  flags: string[];
+  preview: string;
+}
+
+export interface EmailFull extends EmailSummary {
+  body: string;
+}
+
+export interface MailboxInfo {
+  name: string;
+  total: number;
+  unread: number;
+}
+
+export interface ServerInfo {
+  user: string;
+  imap: string;
+  smtp: string;
+  inbox_total: number;
+  inbox_unread: number;
+}
+
+export class MailService {
+  private imap: ImapFlow | null = null;
+  private smtp: Transporter | null = null;
+
+  constructor(
+    private readonly config: Config,
+    private readonly logger: Logger,
+  ) {}
+
+  async connectImap(): Promise<ImapFlow> {
+    if (this.imap?.authenticated) {
+      return this.imap;
+    }
+
+    const opts: ImapFlowOptions = {
+      host: this.config.imapHost,
+      port: this.config.imapPort,
+      secure: this.config.imapSecure,
+      auth: {
+        user: this.config.imapUser,
+        pass: this.config.imapPass,
+      },
+      logger: false,
+    };
+
+    if (!this.config.imapRejectUnauthorized) {
+      opts.tls = { rejectUnauthorized: false };
+    }
+
+    this.imap = new ImapFlow(opts);
+    await this.imap.connect();
+    this.logger.info(
+      { host: this.config.imapHost, port: this.config.imapPort, user: this.config.imapUser },
+      "IMAP connected",
+    );
+    return this.imap;
+  }
+
+  getSmtp(): Transporter {
+    if (this.smtp) {
+      return this.smtp;
+    }
+
+    this.smtp = nodemailer.createTransport({
+      host: this.config.smtpHost,
+      port: this.config.smtpPort,
+      secure: this.config.smtpSecure,
+      auth: {
+        user: this.config.smtpUser,
+        pass: this.config.smtpPass,
+      },
+      ...(this.config.smtpRejectUnauthorized
+        ? {}
+        : { tls: { rejectUnauthorized: false } }),
+    });
+
+    this.logger.info(
+      { host: this.config.smtpHost, port: this.config.smtpPort },
+      "SMTP transport ready",
+    );
+    return this.smtp;
+  }
+
+  async getServerInfo(): Promise<ServerInfo> {
+    const c = await this.connectImap();
+    const lock = await c.getMailboxLock("INBOX");
+    try {
+      const status = await c.status("INBOX", { messages: true, unseen: true });
+      return {
+        user: this.config.imapUser,
+        imap: `${this.config.imapHost}:${this.config.imapPort}`,
+        smtp: `${this.config.smtpHost}:${this.config.smtpPort}`,
+        inbox_total: status.messages ?? 0,
+        inbox_unread: status.unseen ?? 0,
+      };
+    } finally {
+      lock.release();
+    }
+  }
+
+  async listMailboxes(): Promise<MailboxInfo[]> {
+    const c = await this.connectImap();
+    const list = await c.list();
+    const result: MailboxInfo[] = [];
+    for (const item of list) {
+      // imapflow list() returns objects with path + specialUse flags
+      // Path can be "INBOX", "Sent Items", or "/"-delimited. Trim and clean.
+      const rawName = item.path || item.name || "";
+      const name = rawName.split("/").pop()?.replace(/"/g, "").trim() || "";
+      const status = await c.status(name, { messages: true, unseen: true });
+      result.push({
+        name,
+        total: status.messages ?? 0,
+        unread: status.unseen ?? 0,
+      });
+    }
+    return result;
+  }
+
+  async listEmails(
+    mailbox: string,
+    limit: number,
+    unreadOnly: boolean,
+  ): Promise<EmailSummary[]> {
+    const c = await this.connectImap();
+    const lock = await c.getMailboxLock(mailbox);
+    try {
+      const criteria = unreadOnly ? { seen: false } : { all: true };
+      const uids = (await c.search(criteria as never)) || [];
+      const recent = uids.slice(-limit).reverse();
+      const results: EmailSummary[] = [];
+      for await (const msg of c.fetch(recent, {
+        uid: true,
+        envelope: true,
+        flags: true,
+      } as never)) {
+        // imapflow doesn't expose preview at the type level; fetch via unknown
+        const m = msg as unknown as { preview?: string };
+        results.push({
+          uid: msg.uid as number,
+          subject: msg.envelope?.subject,
+          from: msg.envelope?.from?.[0]?.address,
+          to: msg.envelope?.to?.map((t) => t.address).join(", "),
+          date: msg.envelope?.date?.toISOString(),
+          flags: msg.flags ? Array.from(msg.flags) : [],
+          preview: m.preview?.substring(0, 200) || "",
+        });
+      }
+      return results;
+    } finally {
+      lock.release();
+    }
+  }
+
+  async readEmail(uid: number, mailbox: string): Promise<EmailFull | null> {
+    const c = await this.connectImap();
+    const lock = await c.getMailboxLock(mailbox);
+    try {
+      const msg = await c.fetchOne(String(uid), {
+        uid: true,
+        envelope: true,
+        flags: true,
+        source: true,
+      } as never, { uid: true });
+      if (!msg) return null;
+
+      const m = msg as unknown as { preview?: string };
+      const source = msg.source?.toString() || "";
+      const textMatch = source.match(
+        /Content-Type: text\/plain[^\n]*\n(?:[^:\n]+:\n)?\n\n([\s\S]*?)(?=\n\n[A-Z]|\n\n$|$)/,
+      );
+      const body = textMatch ? textMatch[1].trim() : source.substring(0, 2000);
+
+      return {
+        uid: msg.uid as number,
+        subject: msg.envelope?.subject,
+        from: msg.envelope?.from?.[0]?.address,
+        to: msg.envelope?.to?.map((t) => t.address).join(", "),
+        date: msg.envelope?.date?.toISOString(),
+        flags: msg.flags ? Array.from(msg.flags) : [],
+        preview: m.preview?.substring(0, 200) || "",
+        body,
+      };
+    } finally {
+      lock.release();
+    }
+  }
+
+  async searchEmails(
+    query: string,
+    mailbox: string,
+    limit: number,
+  ): Promise<EmailSummary[]> {
+    const c = await this.connectImap();
+    const lock = await c.getMailboxLock(mailbox);
+    try {
+      const uids = (await c.search({ body: query })) || [];
+      const recent = uids.slice(-limit).reverse();
+      const results: EmailSummary[] = [];
+      for await (const msg of c.fetch(recent, {
+        uid: true,
+        envelope: true,
+        flags: true,
+      } as never)) {
+        const m = msg as unknown as { preview?: string };
+        results.push({
+          uid: msg.uid as number,
+          subject: msg.envelope?.subject,
+          from: msg.envelope?.from?.[0]?.address,
+          to: undefined,
+          date: msg.envelope?.date?.toISOString(),
+          flags: msg.flags ? Array.from(msg.flags) : [],
+          preview: m.preview?.substring(0, 200) || "",
+        });
+      }
+      return results;
+    } finally {
+      lock.release();
+    }
+  }
+
+  async sendEmail(
+    to: string,
+    subject: string,
+    body: string,
+  ): Promise<{ messageId: string }> {
+    const t = this.getSmtp();
+    const info = await t.sendMail({
+      from: this.config.smtpFrom || this.config.smtpUser,
+      to,
+      subject,
+      text: body,
+    });
+    this.logger.info({ to, subject, messageId: info.messageId }, "Email sent");
+    return { messageId: info.messageId || "" };
+  }
+
+  async markRead(uid: number, mailbox: string, read: boolean): Promise<void> {
+    const c = await this.connectImap();
+    const lock = await c.getMailboxLock(mailbox);
+    try {
+      await c.messageFlagsSet(String(uid), ["\\Seen"], {
+        operation: read ? "add" : "remove",
+        uid: true,
+      } as never);
+    } finally {
+      lock.release();
+    }
+  }
+
+  async deleteEmail(uid: number, mailbox: string): Promise<void> {
+    const c = await this.connectImap();
+    const lock = await c.getMailboxLock(mailbox);
+    try {
+      await c.messageFlagsSet(String(uid), ["\\Deleted"], {
+        operation: "add",
+        uid: true,
+      } as never);
+      await c.messageDelete(uid);
+    } finally {
+      lock.release();
+    }
+  }
+
+  async close(): Promise<void> {
+    if (this.imap) {
+      try {
+        await this.imap.logout();
+      } catch {
+        // ignore
+      }
+      this.imap = null;
+    }
+    if (this.smtp) {
+      this.smtp.close();
+      this.smtp = null;
+    }
+  }
+}

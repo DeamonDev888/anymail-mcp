@@ -1,0 +1,54 @@
+{
+  "name": "imap-smtp-mcp",
+  "version": "1.0.0",
+  "description": "Universal MCP server exposing any IMAP/SMTP mailbox as Model Context Protocol tools.",
+  "main": "dist/index.js",
+  "type": "module",
+  "bin": {
+    "imap-smtp-mcp": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsx watch src/index.ts",
+    "lint": "eslint src/**/*.ts tests/**/*.ts",
+    "format": "prettier --write src/**/*.ts tests/**/*.ts",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "imap",
+    "smtp",
+    "email",
+    "fastmcp",
+    "agent",
+    "claude-desktop",
+    "hermes"
+  ],
+  "author": "Deamon",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.25.3",
+    "fastmcp": "^3.29.0",
+    "imapflow": "^1.0.171",
+    "nodemailer": "^6.9.13",
+    "pino": "^9.5.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "@types/nodemailer": "^6.4.16",
+    "@typescript-eslint/eslint-plugin": "^7.18.0",
+    "@typescript-eslint/parser": "^7.18.0",
+    "eslint": "^8.57.0",
+    "prettier": "^3.3.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.5.0",
+    "vitest": "^1.6.0"
+  }
+}

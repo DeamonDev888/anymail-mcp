@@ -1,0 +1,167 @@
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import pino from "pino";
+
+// Mock MailService with controlled behavior
+const mockMail = {
+  getServerInfo: vi.fn(),
+  listMailboxes: vi.fn(),
+  listEmails: vi.fn(),
+  readEmail: vi.fn(),
+  searchEmails: vi.fn(),
+  sendEmail: vi.fn(),
+  markRead: vi.fn(),
+  deleteEmail: vi.fn(),
+  close: vi.fn(),
+};
+
+vi.mock("../src/mail-service.js", () => ({
+  MailService: vi.fn().mockImplementation(() => mockMail),
+}));
+
+// Collect registered tools in an array
+const registeredTools: Array<{
+  name: string;
+  description: string;
+  parameters: unknown;
+  execute: (args: Record<string, unknown>) => Promise<unknown>;
+}> = [];
+
+// Mock fastmcp
+vi.mock("fastmcp", () => ({
+  FastMCP: vi.fn().mockImplementation(() => ({
+    addTool: vi.fn((tool: typeof registeredTools[number]) => {
+      registeredTools.push(tool);
+    }),
+    start: vi.fn().mockResolvedValue(undefined),
+  })),
+}));
+
+import { registerMailTools } from "../src/tools.js";
+import { MailService } from "../src/mail-service.js";
+
+// Helper: create a fake addTool function and register all tools
+function registerAllTools(): typeof registeredTools {
+  registeredTools.length = 0;
+  const fakeAddTool = vi.fn((tool: typeof registeredTools[number]) => {
+    registeredTools.push(tool);
+  });
+  registerMailTools(
+    fakeAddTool as never,
+    new (MailService as never)({} as never, pino({ level: "silent" }) as never),
+  );
+  return registeredTools;
+}
+
+// Helper: register a single tool by name
+function registerOneTool(name: string): typeof registeredTools[number] {
+  registeredTools.length = 0;
+  let captured: typeof registeredTools[number] | null = null;
+  const fakeAddTool = vi.fn((t: typeof registeredTools[number]) => {
+    if (t.name === name) captured = t;
+  });
+  registerMailTools(
+    fakeAddTool as never,
+    new (MailService as never)({} as never, pino({ level: "silent" }) as never),
+  );
+  if (!captured) throw new Error(`Tool ${name} not registered`);
+  return captured;
+}
+
+describe("registerMailTools", () => {
+  beforeEach(() => {
+    registeredTools.length = 0;
+    Object.values(mockMail).forEach((m) => m.mockReset());
+  });
+
+  it("registers all 8 tools", () => {
+    const tools = registerAllTools();
+    expect(tools.length).toBe(8);
+    const names = tools.map((t) => t.name).sort();
+    expect(names).toEqual([
+      "delete_email",
+      "list_emails",
+      "list_mailboxes",
+      "mark_read",
+      "read_email",
+      "search_emails",
+      "send_email",
+      "server_info",
+    ]);
+  });
+
+  it("every tool has a name, description, parameters, and execute function", () => {
+    const tools = registerAllTools();
+    for (const t of tools) {
+      expect(typeof t.name).toBe("string");
+      expect(t.name.length).toBeGreaterThan(0);
+      expect(typeof t.description).toBe("string");
+      expect(t.description.length).toBeGreaterThan(0);
+      expect(t.parameters).toBeDefined();
+      expect(typeof t.execute).toBe("function");
+    }
+  });
+
+  it("server_info returns JSON string of getServerInfo()", async () => {
+    mockMail.getServerInfo.mockResolvedValue({ user: "u", inbox_total: 10 });
+    const tool = registerOneTool("server_info");
+    const result = await tool.execute({});
+    expect(JSON.parse(result as string)).toEqual({ user: "u", inbox_total: 10 });
+  });
+
+  it("list_mailboxes returns JSON array", async () => {
+    mockMail.listMailboxes.mockResolvedValue([{ name: "INBOX", total: 5, unread: 1 }]);
+    const tool = registerOneTool("list_mailboxes");
+    const result = await tool.execute({});
+    expect(JSON.parse(result as string)).toEqual([{ name: "INBOX", total: 5, unread: 1 }]);
+  });
+
+  it("send_email passes through to mail service", async () => {
+    mockMail.sendEmail.mockResolvedValue({ messageId: "<abc@id>" });
+    const tool = registerOneTool("send_email");
+    const result = await tool.execute({ to: "a@b.com", subject: "Hi", body: "Hello" });
+    expect(mockMail.sendEmail).toHaveBeenCalledWith("a@b.com", "Hi", "Hello");
+    expect(JSON.parse(result as string)).toEqual({
+      status: "sent",
+      to: "a@b.com",
+      subject: "Hi",
+      messageId: "<abc@id>",
+    });
+  });
+
+  it("read_email returns error JSON when email is null", async () => {
+    mockMail.readEmail.mockResolvedValue(null);
+    const tool = registerOneTool("read_email");
+    const result = await tool.execute({ uid: 42, mailbox: "INBOX" });
+    expect(JSON.parse(result as string)).toEqual({ error: "Email not found" });
+  });
+
+  it("mark_read passes read flag through", async () => {
+    mockMail.markRead.mockResolvedValue(undefined);
+    const tool = registerOneTool("mark_read");
+    const result = await tool.execute({ uid: 5, mailbox: "INBOX", read: false });
+    expect(mockMail.markRead).toHaveBeenCalledWith(5, "INBOX", false);
+    expect(JSON.parse(result as string)).toEqual({ uid: 5, status: "ok", read: false });
+  });
+
+  it("delete_email calls mail service", async () => {
+    mockMail.deleteEmail.mockResolvedValue(undefined);
+    const tool = registerOneTool("delete_email");
+    const result = await tool.execute({ uid: 3, mailbox: "INBOX" });
+    expect(mockMail.deleteEmail).toHaveBeenCalledWith(3, "INBOX");
+    expect(JSON.parse(result as string)).toEqual({ uid: 3, status: "deleted" });
+  });
+
+  it("list_emails respects unread_only and limit", async () => {
+    mockMail.listEmails.mockResolvedValue([]);
+    const tool = registerOneTool("list_emails");
+    await tool.execute({ mailbox: "Junk", limit: 50, unread_only: true });
+    expect(mockMail.listEmails).toHaveBeenCalledWith("Junk", 50, true);
+  });
+
+  it("search_emails passes query and limit", async () => {
+    mockMail.searchEmails.mockResolvedValue([]);
+    const tool = registerOneTool("search_emails");
+    await tool.execute({ query: "audit", mailbox: "INBOX", limit: 10 });
+    expect(mockMail.searchEmails).toHaveBeenCalledWith("audit", "INBOX", 10);
+  });
+});
