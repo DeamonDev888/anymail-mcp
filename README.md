@@ -2,7 +2,7 @@
 
 **Universal IMAP/SMTP ↔ MCP bridge.** Expose any IMAP mailbox and SMTP relay as
 [Model Context Protocol](https://modelcontextprotocol.io/) tools, so any
-MCP-compatible agent (Claude Desktop, Hermes, your own scripts) can read,
+MCP-compatible agent (Claude Code, Hermes, your own scripts) can read,
 search, send, and manage email.
 
 ```
@@ -173,7 +173,7 @@ docker run -d --name imap-smtp-mcp \
   imap-smtp-mcp:latest
 ```
 
-### As an MCP client (Claude Desktop, etc.)
+### As an MCP client (Claude Code, etc.)
 
 ```json
 {
