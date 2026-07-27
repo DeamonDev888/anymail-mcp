@@ -161,11 +161,11 @@ describe("MailService", () => {
     const result = await mail.replyEmail(42, "INBOX", "My reply body");
 
     // Verify IMAP was called to fetch the original
-    expect(mockImap.fetchOne).toHaveBeenCalledWith("42", {
-      uid: true,
-      envelope: true,
-      internalDate: true,
-    });
+    expect(mockImap.fetchOne).toHaveBeenCalledWith(
+      "42",
+      { uid: true, envelope: true, internalDate: true },
+      { uid: true },
+    );
     expect(lock.release).toHaveBeenCalled();
 
     // Verify SMTP send had threading headers
@@ -244,11 +244,13 @@ describe("MailService", () => {
     await mail.markRead(42, "INBOX", true);
     expect(mockImap.messageFlagsSet).toHaveBeenCalledWith("42", ["\\Seen"], {
       operation: "add",
+      uid: true,
     });
 
     await mail.markRead(42, "INBOX", false);
     expect(mockImap.messageFlagsSet).toHaveBeenCalledWith("42", ["\\Seen"], {
       operation: "remove",
+      uid: true,
     });
   });
 
@@ -261,8 +263,9 @@ describe("MailService", () => {
 
     expect(mockImap.messageFlagsSet).toHaveBeenCalledWith("99", ["\\Deleted"], {
       operation: "add",
+      uid: true,
     });
-    expect(mockImap.messageDelete).toHaveBeenCalledWith(99);
+    expect(mockImap.messageDelete).toHaveBeenCalledWith("99", { uid: true });
   });
 
   it("close() calls logout when IMAP is connected", async () => {

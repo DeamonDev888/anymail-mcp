@@ -187,12 +187,16 @@ export class MailService {
     const c = await this.connectImap();
     const lock = await c.getMailboxLock(mailbox);
     try {
-      const msg = await c.fetchOne(String(uid), {
-        uid: true,
-        envelope: true,
-        flags: true,
-        source: true,
-      } as never);
+      const msg = await c.fetchOne(
+        String(uid),
+        {
+          uid: true,
+          envelope: true,
+          flags: true,
+          source: true,
+        } as never,
+        { uid: true },
+      );
       if (!msg) return null;
 
       const m = msg as unknown as { preview?: string };
@@ -341,11 +345,11 @@ export class MailService {
     let originalSubject: string | undefined;
 
     try {
-      const msg = await c.fetchOne(String(uid), {
-        uid: true,
-        envelope: true,
-        internalDate: true,
-      });
+      const msg = await c.fetchOne(
+        String(uid),
+        { uid: true, envelope: true, internalDate: true },
+        { uid: true },
+      );
       if (!msg) throw new Error(`Email UID ${uid} not found in ${mailbox}`);
       originalMsgId = msg.envelope?.messageId;
       originalFrom = msg.envelope?.from?.[0]?.address;
@@ -405,6 +409,7 @@ export class MailService {
     try {
       await c.messageFlagsSet(String(uid), ["\\Seen"], {
         operation: read ? "add" : "remove",
+        uid: true,
       } as never);
     } finally {
       lock.release();
@@ -417,8 +422,9 @@ export class MailService {
     try {
       await c.messageFlagsSet(String(uid), ["\\Deleted"], {
         operation: "add",
+        uid: true,
       } as never);
-      await c.messageDelete(uid);
+      await c.messageDelete(String(uid), { uid: true } as never);
     } finally {
       lock.release();
     }
