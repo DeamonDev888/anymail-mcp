@@ -67,6 +67,25 @@ function registerOneTool(name: string): typeof registeredTools[number] {
   return captured;
 }
 
+// Helper: register with a specific security policy
+function registerOneToolWithPolicy(
+  name: string,
+  allowedDomains: string[],
+): typeof registeredTools[number] {
+  registeredTools.length = 0;
+  let captured: typeof registeredTools[number] | null = null;
+  const fakeAddTool = vi.fn((t: typeof registeredTools[number]) => {
+    if (t.name === name) captured = t;
+  });
+  registerMailTools(
+    fakeAddTool as never,
+    new (MailService as never)({} as never, pino({ level: "silent" }) as never),
+    { allowedDomains },
+  );
+  if (!captured) throw new Error(`Tool ${name} not registered`);
+  return captured;
+}
+
 describe("registerMailTools", () => {
   beforeEach(() => {
     registeredTools.length = 0;
@@ -163,5 +182,96 @@ describe("registerMailTools", () => {
     const tool = registerOneTool("search_emails");
     await tool.execute({ query: "audit", mailbox: "INBOX", limit: 10 });
     expect(mockMail.searchEmails).toHaveBeenCalledWith("audit", "INBOX", 10);
+  });
+
+  // ── Security integration tests ──
+
+  it("send_email blocks recipient not in allowlist", async () => {
+    const tool = registerOneToolWithPolicy("send_email", ["example.com"]);
+    const result = await tool.execute({
+      to: "user@gmail.com",
+      subject: "Hi",
+      body: "Hello",
+    });
+    const parsed = JSON.parse(result as string);
+    expect(parsed.error).toContain("Blocked by security policy");
+    expect(parsed.reason).toContain("gmail.com");
+    expect(mockMail.sendEmail).not.toHaveBeenCalled();
+  });
+
+  it("send_email allows recipient in allowlist", async () => {
+    mockMail.sendEmail.mockResolvedValue({ messageId: "<ok@id>" });
+    const tool = registerOneToolWithPolicy("send_email", ["example.com"]);
+    const result = await tool.execute({
+      to: "user@example.com",
+      subject: "Hi",
+      body: "Hello",
+    });
+    const parsed = JSON.parse(result as string);
+    expect(parsed.status).toBe("sent");
+    expect(mockMail.sendEmail).toHaveBeenCalled();
+  });
+
+  it("send_email sanitizes CRLF in subject", async () => {
+    mockMail.sendEmail.mockResolvedValue({ messageId: "<ok@id>" });
+    const tool = registerOneTool("send_email");
+    await tool.execute({
+      to: "user@example.com",
+      subject: "Hello\r\nBcc: evil@hacker.com",
+      body: "Body",
+    });
+    const callArgs = mockMail.sendEmail.mock.calls[0];
+    expect(callArgs[1]).not.toContain("\r");
+    expect(callArgs[1]).not.toContain("\n");
+    expect(callArgs[1]).toContain("Hello");
+  });
+
+  it("send_email rejects invalid email format", async () => {
+    const tool = registerOneTool("send_email");
+    const result = await tool.execute({
+      to: "not-an-email",
+      subject: "Hi",
+      body: "Hello",
+    });
+    const parsed = JSON.parse(result as string);
+    expect(parsed.error).toContain("security policy");
+    expect(mockMail.sendEmail).not.toHaveBeenCalled();
+  });
+
+  it("list_emails rejects invalid mailbox name", async () => {
+    const tool = registerOneTool("list_emails");
+    const result = await tool.execute({
+      mailbox: "../etc/passwd",
+      limit: 10,
+      unread_only: false,
+    });
+    const parsed = JSON.parse(result as string);
+    expect(parsed.error).toBe("Invalid mailbox name");
+    expect(mockMail.listEmails).not.toHaveBeenCalled();
+  });
+
+  it("search_emails strips quotes from query (IMAP injection prevention)", async () => {
+    mockMail.searchEmails.mockResolvedValue([]);
+    const tool = registerOneTool("search_emails");
+    await tool.execute({ query: 'hello"injection"', mailbox: "INBOX", limit: 10 });
+    const callArgs = mockMail.searchEmails.mock.calls[0];
+    expect(callArgs[0]).not.toContain('"');
+    expect(callArgs[0]).toBe("helloinjection");
+  });
+
+  it("read_email rejects invalid mailbox name", async () => {
+    const tool = registerOneTool("read_email");
+    const result = await tool.execute({ uid: 1, mailbox: "INBOX; rm -rf /" });
+    const parsed = JSON.parse(result as string);
+    expect(parsed.error).toBe("Invalid mailbox name");
+    expect(mockMail.readEmail).not.toHaveBeenCalled();
+  });
+
+  it("mark_read rejects invalid mailbox name", async () => {
+    const tool = registerOneTool("mark_read");
+    const result = await tool.execute({ uid: 1, mailbox: "../", read: true });
+    const parsed = JSON.parse(result as string);
+    expect(parsed.error).toBe("Invalid mailbox name");
+    expect(mockMail.markRead).not.toHaveBeenCalled();
   });
 });

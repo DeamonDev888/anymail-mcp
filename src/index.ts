@@ -11,6 +11,7 @@ import { loadConfig } from "./config.js";
 import { createLogger } from "./logger.js";
 import { MailService } from "./mail-service.js";
 import { registerMailTools } from "./tools.js";
+import { redactEmail } from "./security.js";
 
 async function main(): Promise<void> {
   // 1. Load and validate config
@@ -25,12 +26,19 @@ async function main(): Promise<void> {
   // 2. Set up logger
   const logger = createLogger(config.logDir, "imap-smtp-mcp", config.logLevel);
 
+  const userForLog = config.redactLogs ? redactEmail(config.imapUser) : config.imapUser;
   logger.info(
     {
       transport: config.fastmcpTransport,
       port: config.fastmcpPort,
       imap: `${config.imapHost}:${config.imapPort}`,
       smtp: `${config.smtpHost}:${config.smtpPort}`,
+      user: userForLog,
+      security: {
+        authToken: config.authToken ? "enabled" : "disabled",
+        allowedDomains: config.allowedDomains.length > 0 ? config.allowedDomains : "all",
+        redactLogs: config.redactLogs,
+      },
     },
     "Starting imap-smtp-mcp",
   );
@@ -38,16 +46,35 @@ async function main(): Promise<void> {
   // 3. Create mail service (does not connect yet - lazy)
   const mail = new MailService(config, logger);
 
-  // 4. Create MCP server
-  const server = new FastMCP({
+  // 4. Create MCP server (with optional Bearer auth)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const serverOptions: any = {
     name: "imap-smtp-mcp",
     version: "1.0.0",
-  });
+  };
 
-  // 5. Register tools
+  // If auth token is configured, add an authenticate function (FastMCP 3.x)
+  if (config.authToken) {
+    logger.info("Bearer token authentication enabled");
+    serverOptions.authenticate = (request: Request) => {
+      const authHeader = request.headers.get("Authorization");
+      if (!authHeader || !authHeader.startsWith("Bearer ")) {
+        throw new Error("Missing or invalid Authorization header");
+      }
+      const token = authHeader.substring(7);
+      if (token !== config.authToken) {
+        throw new Error("Invalid auth token");
+      }
+    };
+  }
+
+  const server = new FastMCP(serverOptions);
+
+  // 5. Register tools with security policy
   registerMailTools(
     (tool: unknown) => server.addTool(tool as Parameters<typeof server.addTool>[0]),
     mail,
+    { allowedDomains: config.allowedDomains },
   );
 
   // 6. Graceful shutdown

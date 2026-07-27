@@ -33,6 +33,18 @@ const ConfigSchema = z.object({
   // Logging
   logLevel: z.enum(["fatal", "error", "warn", "info", "debug", "trace"]).default("info"),
   logDir: z.string().default("./logs"),
+
+  // ── Security (all optional, opt-in) ──
+  /** Bearer token for HTTP transport. If set, clients must send
+   *  `Authorization: Bearer <token>` header. Ignored in stdio mode. */
+  authToken: z.string().optional(),
+  /** Comma-separated allowlist of recipient domains for send_email.
+   *  If set, only emails to these domains are allowed.
+   *  Example: "example.com,myorg.org" */
+  allowedDomains: z.array(z.string()).default([]),
+  /** When true, masks the IMAP/SMTP user in logs to prevent PII leaks.
+   *  Default: true */
+  redactLogs: z.boolean().default(true),
 });
 
 export type Config = z.infer<typeof ConfigSchema>;
@@ -64,6 +76,12 @@ export function loadConfig(): Config {
 
     logLevel: process.env.LOG_LEVEL,
     logDir: process.env.LOG_DIR,
+
+    authToken: process.env.AUTH_TOKEN,
+    allowedDomains: process.env.ALLOWED_DOMAINS
+      ? process.env.ALLOWED_DOMAINS.split(",").map((s) => s.trim()).filter(Boolean)
+      : undefined,
+    redactLogs: process.env.REDACT_LOGS ? process.env.REDACT_LOGS === "true" : undefined,
   };
 
   // Strip undefined so zod applies defaults
