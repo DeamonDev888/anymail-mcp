@@ -177,7 +177,7 @@ describe("MailService", () => {
         text: "My reply body",
         headers: {
           "In-Reply-To": "<orig-message-id>",
-          "References": "<orig-message-id>",
+          References: "<orig-message-id>",
         },
       }),
     );

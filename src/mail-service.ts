@@ -277,7 +277,12 @@ export class MailService {
     uid: number,
     mailbox: string,
     body: string,
-  ): Promise<{ messageId: string; to: string; subject: string; inReplyTo: string | null }> {
+  ): Promise<{
+    messageId: string;
+    to: string;
+    subject: string;
+    inReplyTo: string | null;
+  }> {
     // 1. Read the original email to extract threading headers
     const c = await this.connectImap();
     const lock = await c.getMailboxLock(mailbox);
@@ -320,7 +325,7 @@ export class MailService {
     if (originalMsgId) {
       (mailOptions as never as { headers: Record<string, string> }).headers = {
         "In-Reply-To": `<${originalMsgId}>`,
-        "References": `<${originalMsgId}>`,
+        References: `<${originalMsgId}>`,
       };
     }
     const info = await t.sendMail(mailOptions);
