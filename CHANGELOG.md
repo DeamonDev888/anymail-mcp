@@ -1,5 +1,33 @@
 # Changelog
 
+## [1.2.2] - 2026-07-27
+
+### Fixed
+- **CRITICAL: `read_email`, `reply_email`, `mark_read`, `delete_email` broken since v1.2.0**
+- Root cause: commit `0db9f57` removed the 3rd `{uid: true}` arg from `fetchOne()`, `messageFlagsSet()`, and `messageDelete()`
+- Without `{uid: true}`, imapflow interprets the 1st arg as a **sequence number**, not a UID. Any UID > message count returns NULL → "Email not found"
+- Fix: restore `{uid: true}` in all 3 methods (readEmail, replyEmail, markRead, deleteEmail)
+- 3 unit tests updated to match the correct imapflow call signatures
+
+### Verified live
+- Deployed on Stalwart (admin@veridy.ca) — all 9 tools tested via httpStream
+- `read_email UID 60` returns full body (was returning "Email not found")
+- `reply_email` sends with correct `In-Reply-To` + `References` headers
+
+## [1.2.1] - 2026-07-27 (BROKEN — superseded by 1.2.2)
+
+### Broken
+- Removed `{uid: true}` from fetchOne/flagsSet — broke read_email, reply_email, mark_read, delete_email
+
+## [1.2.0] - 2026-07-27
+
+### Added
+- `send_email` gains `is_html` (send HTML body) and `preview` (validate without sending) params
+- `read_email` gains `full` param (default: false = preview, true = full body)
+- `reply_email` tool (reads original by UID, sends reply with `In-Reply-To`/`References`/`Re:` threading)
+- `truncated` flag emitted when preview mode truncates body
+- Bumped to 82 unit tests
+
 ## [1.1.0] - 2026-07-27
 
 ### Renamed
