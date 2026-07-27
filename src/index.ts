@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * imap-smtp-mcp - Universal IMAP/SMTP MCP server
+ * anymail-mcp - Universal IMAP/SMTP MCP server
  *
  * Exposes any IMAP/SMTP mailbox as MCP tools (8 tools, FastMCP 3.x
  * httpStream transport). See README.md for usage.
@@ -26,7 +26,7 @@ async function main(): Promise<void> {
   }
 
   // 2. Set up logger
-  const logger = createLogger(config.logDir, "imap-smtp-mcp", config.logLevel);
+  const logger = createLogger(config.logDir, "anymail-mcp", config.logLevel);
 
   const userForLog = config.redactLogs
     ? redactEmail(config.imapUser)
@@ -45,7 +45,7 @@ async function main(): Promise<void> {
         redactLogs: config.redactLogs,
       },
     },
-    "Starting imap-smtp-mcp",
+    "Starting anymail-mcp",
   );
 
   // 3. Create mail service (does not connect yet - lazy)
@@ -54,8 +54,8 @@ async function main(): Promise<void> {
   // 4. Create MCP server (with optional Bearer auth)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const serverOptions: any = {
-    name: "imap-smtp-mcp",
-    version: "1.0.0",
+    name: "anymail-mcp",
+    version: "1.1.0",
   };
 
   // If auth token is configured, add an authenticate function (FastMCP 3.x)

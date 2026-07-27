@@ -5,8 +5,8 @@ Thanks for your interest in contributing!
 ## Setup
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/imap-smtp-mcp.git
-cd imap-smtp-mcp
+git clone https://github.com/YOUR_USERNAME/anymail-mcp.git
+cd anymail-mcp
 npm install
 ```
 
@@ -40,7 +40,7 @@ Provider setup notes belong in the README, not in code. To add an example:
 
 Use GitHub issues. Include:
 
-- imap-smtp-mcp version (`npm list imap-smtp-mcp` or check the running version)
+- anymail-mcp version (`npm list anymail-mcp` or check the running version)
 - Node.js version (`node --version`)
 - Mail provider (Gmail, Outlook, self-hosted, etc.)
 - Relevant logs (set `LOG_LEVEL=debug` first)

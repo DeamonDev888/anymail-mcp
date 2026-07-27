@@ -1,4 +1,4 @@
-# imap-smtp-mcp
+# anymail-mcp
 
 **Connect ANY mailbox to ANY AI agent.** Expose Gmail, Outlook, Apple Mail
 (iCloud), Fastmail, ProtonMail, Yahoo, and every self-hosted server as
@@ -8,8 +8,8 @@ search, send, and manage email.
 
 ```
 ┌──────────────────┐  httpStream + SSE  ┌──────────────────┐  IMAP   ┌────────────┐
-│  MCP client      │ ──────────────────►│ imap-smtp-mcp    │ ───────►│ Mail       │
-│  (Claude,        │                    │ (this server)    │         │ server     │
+│  MCP client      │ ──────────────────►│  anymail-mcp     │ ───────►│ Mail       │
+│  (Claude,        │                    │  (this server)   │         │ server     │
 │   Hermes, etc.)  │                    │                  │  SMTP   │ (any)      │
 └──────────────────┘                    └──────────────────┘ ───────►└────────────┘
 ```
@@ -38,15 +38,15 @@ search, send, and manage email.
 ### From npm (once published)
 
 ```bash
-npm install -g imap-smtp-mcp
-imap-smtp-mcp
+npm install -g anymail-mcp
+anymail-mcp
 ```
 
 ### From source
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/imap-smtp-mcp.git
-cd imap-smtp-mcp
+git clone https://github.com/YOUR_USERNAME/anymail-mcp.git
+cd anymail-mcp
 npm install
 npm run build
 npm start
@@ -112,7 +112,7 @@ FASTMCP_PORT=3143
 FASTMCP_HOST=0.0.0.0
 
 LOG_LEVEL=info
-LOG_DIR=/var/log/imap-smtp-mcp
+LOG_DIR=/var/log/anymail-mcp
 ```
 
 ## 🚀 Usage
@@ -122,14 +122,14 @@ LOG_DIR=/var/log/imap-smtp-mcp
 Once configured, just run:
 
 ```bash
-imap-smtp-mcp
+anymail-mcp
 # [INFO] HTTP Stream listening on http://0.0.0.0:3143/mcp
 ```
 
 ### With systemd
 
 ```ini
-# /etc/systemd/system/imap-smtp-mcp.service
+# /etc/systemd/system/anymail-mcp.service
 [Unit]
 Description=IMAP/SMTP MCP Server
 After=network.target
@@ -137,12 +137,12 @@ After=network.target
 [Service]
 Type=simple
 User=imap-smtp
-EnvironmentFile=/etc/imap-smtp-mcp.env
-ExecStart=/usr/bin/node /opt/imap-smtp-mcp/dist/index.js
+EnvironmentFile=/etc/anymail-mcp.env
+ExecStart=/usr/bin/node /opt/anymail-mcp/dist/index.js
 Restart=always
 RestartSec=10
-StandardOutput=append:/var/log/imap-smtp-mcp/mcp.log
-StandardError=append:/var/log/imap-smtp-mcp/mcp.err.log
+StandardOutput=append:/var/log/anymail-mcp/mcp.log
+StandardError=append:/var/log/anymail-mcp/mcp.err.log
 
 [Install]
 WantedBy=multi-user.target
@@ -150,8 +150,8 @@ WantedBy=multi-user.target
 
 ```bash
 sudo systemctl daemon-reload
-sudo systemctl enable --now imap-smtp-mcp
-systemctl status imap-smtp-mcp
+sudo systemctl enable --now anymail-mcp
+systemctl status anymail-mcp
 ```
 
 ### With Docker
@@ -168,10 +168,10 @@ CMD ["node", "dist/index.js"]
 ```
 
 ```bash
-docker run -d --name imap-smtp-mcp \
+docker run -d --name anymail-mcp \
   -p 3143:3143 \
   --env-file ./.env \
-  imap-smtp-mcp:latest
+  anymail-mcp:latest
 ```
 
 ### As an MCP client (Claude Code, etc.)
@@ -207,7 +207,7 @@ If you prefer stdio transport (one process per session, e.g. for local desktop):
   "mcpServers": {
     "mail": {
       "command": "node",
-      "args": ["/path/to/imap-smtp-mcp/dist/index.js"],
+      "args": ["/path/to/anymail-mcp/dist/index.js"],
       "env": {
         "FASTMCP_TRANSPORT": "stdio",
         "IMAP_HOST": "imap.gmail.com",
