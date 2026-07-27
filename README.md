@@ -1,8 +1,9 @@
 # imap-smtp-mcp
 
-**Universal IMAP/SMTP ↔ MCP bridge.** Expose any IMAP mailbox and SMTP relay as
+**Connect ANY mailbox to ANY AI agent.** Expose Gmail, Outlook, Apple Mail
+(iCloud), Fastmail, ProtonMail, Yahoo, and every self-hosted server as
 [Model Context Protocol](https://modelcontextprotocol.io/) tools, so any
-MCP-compatible agent (Claude Code, Hermes, your own scripts) can read,
+MCP-compatible agent (Claude Desktop, Hermes, your own scripts) can read,
 search, send, and manage email.
 
 ```
@@ -339,7 +340,7 @@ SMTP_PORT=465
 SMTP_SECURE=true
 ```
 
-### Outlook / Microsoft 365
+### Outlook / Microsoft 365 / Hotmail / Live
 
 1. Enable 2FA on your Microsoft account
 2. Create an app password via Microsoft account security
@@ -352,6 +353,21 @@ IMAP_SECURE=true
 SMTP_HOST=smtp.office365.com
 SMTP_PORT=587
 SMTP_SECURE=false    # STARTTLS, not implicit TLS
+```
+
+### Apple iCloud / Apple Mail / me.com / mac.com
+
+1. Enable 2FA on your Apple Account
+2. Generate an app-specific password at [appleid.apple.com](https://appleid.apple.com) → Sign-In and Security → App-Specific Passwords
+3. Use your full iCloud email and the app-specific password
+
+```dotenv
+IMAP_HOST=imap.mail.me.com
+IMAP_PORT=993
+IMAP_SECURE=true
+SMTP_HOST=smtp.mail.me.com
+SMTP_PORT=587
+SMTP_SECURE=false    # STARTTLS
 ```
 
 ### Fastmail
@@ -380,7 +396,27 @@ IMAP_USER=your-bridge-username
 IMAP_PASS=your-bridge-password
 ```
 
-### Self-hosted (Dovecot, Stalwart, Postfix, etc.)
+### Yahoo Mail / AOL
+
+```dotenv
+IMAP_HOST=imap.mail.yahoo.com
+SMTP_HOST=smtp.mail.yahoo.com
+```
+
+Generate an app password in Yahoo Account Security.
+
+### Zoho Mail
+
+```dotenv
+IMAP_HOST=imap.zoho.com
+IMAP_PORT=993
+IMAP_SECURE=true
+SMTP_HOST=smtp.zoho.com
+SMTP_PORT=465
+SMTP_SECURE=true
+```
+
+### Self-hosted (Dovecot, Stalwart, Postfix, Mailcow, etc.)
 
 For self-hosted mail servers with self-signed certificates:
 
@@ -390,15 +426,6 @@ SMTP_REJECT_UNAUTHORIZED=false
 ```
 
 For production with valid certificates (Let's Encrypt), set both to `true`.
-
-### Yahoo Mail
-
-```dotenv
-IMAP_HOST=imap.mail.yahoo.com
-SMTP_HOST=smtp.mail.yahoo.com
-```
-
-Generate an app password in Yahoo Account Security.
 
 ## 🛠️ Development
 
