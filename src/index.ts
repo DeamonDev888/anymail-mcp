@@ -55,7 +55,7 @@ async function main(): Promise<void> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const serverOptions: any = {
     name: "anymail-mcp",
-    version: "1.1.0",
+    version: "1.2.2",
   };
 
   // If auth token is configured, add an authenticate function (FastMCP 3.x)
