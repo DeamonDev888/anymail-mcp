@@ -129,7 +129,10 @@ describe("MailService", () => {
   });
 
   it("sendEmail uses smtpFrom override when provided", async () => {
-    const mail = new MailService({ ...fakeConfig, smtpFrom: "alias@example.com" }, logger);
+    const mail = new MailService(
+      { ...fakeConfig, smtpFrom: "alias@example.com" },
+      logger,
+    );
     await mail.sendEmail("a@b.com", "Hello", "Body");
 
     expect(mockSendMail).toHaveBeenCalledWith({

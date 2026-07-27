@@ -19,14 +19,18 @@ async function main(): Promise<void> {
   try {
     config = loadConfig();
   } catch (err) {
-    console.error(`Configuration error: ${err instanceof Error ? err.message : String(err)}`);
+    console.error(
+      `Configuration error: ${err instanceof Error ? err.message : String(err)}`,
+    );
     process.exit(1);
   }
 
   // 2. Set up logger
   const logger = createLogger(config.logDir, "imap-smtp-mcp", config.logLevel);
 
-  const userForLog = config.redactLogs ? redactEmail(config.imapUser) : config.imapUser;
+  const userForLog = config.redactLogs
+    ? redactEmail(config.imapUser)
+    : config.imapUser;
   logger.info(
     {
       transport: config.fastmcpTransport,
@@ -36,7 +40,8 @@ async function main(): Promise<void> {
       user: userForLog,
       security: {
         authToken: config.authToken ? "enabled" : "disabled",
-        allowedDomains: config.allowedDomains.length > 0 ? config.allowedDomains : "all",
+        allowedDomains:
+          config.allowedDomains.length > 0 ? config.allowedDomains : "all",
         redactLogs: config.redactLogs,
       },
     },
@@ -72,7 +77,8 @@ async function main(): Promise<void> {
 
   // 5. Register tools with security policy
   registerMailTools(
-    (tool: unknown) => server.addTool(tool as Parameters<typeof server.addTool>[0]),
+    (tool: unknown) =>
+      server.addTool(tool as Parameters<typeof server.addTool>[0]),
     mail,
     { allowedDomains: config.allowedDomains },
   );
@@ -119,7 +125,10 @@ async function main(): Promise<void> {
       logger.info("stdio transport active");
     }
   } catch (err) {
-    logger.fatal({ err: err instanceof Error ? err.message : String(err) }, "Failed to start server");
+    logger.fatal(
+      { err: err instanceof Error ? err.message : String(err) },
+      "Failed to start server",
+    );
     process.exit(1);
   }
 }

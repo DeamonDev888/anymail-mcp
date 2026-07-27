@@ -50,17 +50,38 @@ export function registerMailTools(
 
   addTool({
     name: "list_emails",
-    description: "List emails in a mailbox. Returns subject, from, date, preview.",
+    description:
+      "List emails in a mailbox. Returns subject, from, date, preview.",
     parameters: z.object({
-      mailbox: z.string().default("INBOX").describe("Mailbox name (e.g. INBOX, Sent, Drafts)"),
-      limit: z.number().int().positive().max(500).default(20).describe("Max emails to return"),
-      unread_only: z.boolean().default(false).describe("Only return unread emails"),
+      mailbox: z
+        .string()
+        .default("INBOX")
+        .describe("Mailbox name (e.g. INBOX, Sent, Drafts)"),
+      limit: z
+        .number()
+        .int()
+        .positive()
+        .max(500)
+        .default(20)
+        .describe("Max emails to return"),
+      unread_only: z
+        .boolean()
+        .default(false)
+        .describe("Only return unread emails"),
     }),
-    execute: async (args: { mailbox: string; limit: number; unread_only: boolean }) => {
+    execute: async (args: {
+      mailbox: string;
+      limit: number;
+      unread_only: boolean;
+    }) => {
       if (!isValidMailboxName(args.mailbox)) {
         return JSON.stringify({ error: "Invalid mailbox name" });
       }
-      const emails = await mail.listEmails(args.mailbox, args.limit, args.unread_only);
+      const emails = await mail.listEmails(
+        args.mailbox,
+        args.limit,
+        args.unread_only,
+      );
       return JSON.stringify(emails);
     },
   });
@@ -90,9 +111,19 @@ export function registerMailTools(
     parameters: z.object({
       query: z.string().describe("Search keyword"),
       mailbox: z.string().default("INBOX").describe("Mailbox name"),
-      limit: z.number().int().positive().max(500).default(20).describe("Max results"),
+      limit: z
+        .number()
+        .int()
+        .positive()
+        .max(500)
+        .default(20)
+        .describe("Max results"),
     }),
-    execute: async (args: { query: string; mailbox: string; limit: number }) => {
+    execute: async (args: {
+      query: string;
+      mailbox: string;
+      limit: number;
+    }) => {
       const query = sanitizeSearchQuery(args.query);
       if (!query) {
         return JSON.stringify({ error: "Empty or invalid search query" });
@@ -117,7 +148,10 @@ export function registerMailTools(
       // Security: check allowlist policy
       const check = isRecipientAllowed(args.to, policy);
       if (!check.ok) {
-        return JSON.stringify({ error: "Blocked by security policy", reason: check.reason });
+        return JSON.stringify({
+          error: "Blocked by security policy",
+          reason: check.reason,
+        });
       }
 
       // Security: sanitize subject (no CRLF injection, no null bytes)
@@ -145,7 +179,10 @@ export function registerMailTools(
     parameters: z.object({
       uid: z.number().int().describe("Email UID"),
       mailbox: z.string().default("INBOX").describe("Mailbox name"),
-      read: z.boolean().default(true).describe("true=mark read, false=mark unread"),
+      read: z
+        .boolean()
+        .default(true)
+        .describe("true=mark read, false=mark unread"),
     }),
     execute: async (args: { uid: number; mailbox: string; read: boolean }) => {
       if (!isValidMailboxName(args.mailbox)) {

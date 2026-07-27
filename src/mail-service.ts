@@ -73,7 +73,11 @@ export class MailService {
     this.imap = new ImapFlow(opts);
     await this.imap.connect();
     this.logger.info(
-      { host: this.config.imapHost, port: this.config.imapPort, user: this.config.imapUser },
+      {
+        host: this.config.imapHost,
+        port: this.config.imapPort,
+        user: this.config.imapUser,
+      },
       "IMAP connected",
     );
     return this.imap;
@@ -179,12 +183,16 @@ export class MailService {
     const c = await this.connectImap();
     const lock = await c.getMailboxLock(mailbox);
     try {
-      const msg = await c.fetchOne(String(uid), {
-        uid: true,
-        envelope: true,
-        flags: true,
-        source: true,
-      } as never, { uid: true });
+      const msg = await c.fetchOne(
+        String(uid),
+        {
+          uid: true,
+          envelope: true,
+          flags: true,
+          source: true,
+        } as never,
+        { uid: true },
+      );
       if (!msg) return null;
 
       const m = msg as unknown as { preview?: string };

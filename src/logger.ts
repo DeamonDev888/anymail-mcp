@@ -11,7 +11,11 @@ import pino, { Logger } from "pino";
 import fs from "fs";
 import path from "path";
 
-export function createLogger(logDir: string, name: string, level: string): Logger {
+export function createLogger(
+  logDir: string,
+  name: string,
+  level: string,
+): Logger {
   if (!fs.existsSync(logDir)) {
     fs.mkdirSync(logDir, { recursive: true });
   }

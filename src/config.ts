@@ -31,7 +31,9 @@ const ConfigSchema = z.object({
   smtpRejectUnauthorized: z.boolean().default(false),
 
   // Logging
-  logLevel: z.enum(["fatal", "error", "warn", "info", "debug", "trace"]).default("info"),
+  logLevel: z
+    .enum(["fatal", "error", "warn", "info", "debug", "trace"])
+    .default("info"),
   logDir: z.string().default("./logs"),
 
   // ── Security (all optional, opt-in) ──
@@ -52,12 +54,18 @@ export type Config = z.infer<typeof ConfigSchema>;
 export function loadConfig(): Config {
   const raw = {
     fastmcpTransport: process.env.FASTMCP_TRANSPORT,
-    fastmcpPort: process.env.FASTMCP_PORT ? parseInt(process.env.FASTMCP_PORT, 10) : undefined,
+    fastmcpPort: process.env.FASTMCP_PORT
+      ? parseInt(process.env.FASTMCP_PORT, 10)
+      : undefined,
     fastmcpHost: process.env.FASTMCP_HOST,
 
     imapHost: process.env.IMAP_HOST,
-    imapPort: process.env.IMAP_PORT ? parseInt(process.env.IMAP_PORT, 10) : undefined,
-    imapSecure: process.env.IMAP_SECURE ? process.env.IMAP_SECURE === "true" : undefined,
+    imapPort: process.env.IMAP_PORT
+      ? parseInt(process.env.IMAP_PORT, 10)
+      : undefined,
+    imapSecure: process.env.IMAP_SECURE
+      ? process.env.IMAP_SECURE === "true"
+      : undefined,
     imapUser: process.env.IMAP_USER,
     imapPass: process.env.IMAP_PASS,
     imapRejectUnauthorized: process.env.IMAP_REJECT_UNAUTHORIZED
@@ -65,8 +73,12 @@ export function loadConfig(): Config {
       : undefined,
 
     smtpHost: process.env.SMTP_HOST,
-    smtpPort: process.env.SMTP_PORT ? parseInt(process.env.SMTP_PORT, 10) : undefined,
-    smtpSecure: process.env.SMTP_SECURE ? process.env.SMTP_SECURE === "true" : undefined,
+    smtpPort: process.env.SMTP_PORT
+      ? parseInt(process.env.SMTP_PORT, 10)
+      : undefined,
+    smtpSecure: process.env.SMTP_SECURE
+      ? process.env.SMTP_SECURE === "true"
+      : undefined,
     smtpUser: process.env.SMTP_USER,
     smtpPass: process.env.SMTP_PASS,
     smtpFrom: process.env.SMTP_FROM,
@@ -79,13 +91,19 @@ export function loadConfig(): Config {
 
     authToken: process.env.AUTH_TOKEN,
     allowedDomains: process.env.ALLOWED_DOMAINS
-      ? process.env.ALLOWED_DOMAINS.split(",").map((s) => s.trim()).filter(Boolean)
+      ? process.env.ALLOWED_DOMAINS.split(",")
+          .map((s) => s.trim())
+          .filter(Boolean)
       : undefined,
-    redactLogs: process.env.REDACT_LOGS ? process.env.REDACT_LOGS === "true" : undefined,
+    redactLogs: process.env.REDACT_LOGS
+      ? process.env.REDACT_LOGS === "true"
+      : undefined,
   };
 
   // Strip undefined so zod applies defaults
-  const clean = Object.fromEntries(Object.entries(raw).filter(([_, v]) => v !== undefined));
+  const clean = Object.fromEntries(
+    Object.entries(raw).filter(([_, v]) => v !== undefined),
+  );
 
   const result = ConfigSchema.safeParse(clean);
   if (!result.success) {
