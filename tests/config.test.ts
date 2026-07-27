@@ -1,9 +1,34 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import { loadConfig } from "../src/config.js";
 
 describe("loadConfig", () => {
   // Save original env
   const originalEnv = { ...process.env };
+
+  beforeEach(() => {
+    // Clear all env vars that affect config (so each test starts clean)
+    delete process.env.FASTMCP_TRANSPORT;
+    delete process.env.FASTMCP_PORT;
+    delete process.env.FASTMCP_HOST;
+    delete process.env.IMAP_HOST;
+    delete process.env.IMAP_PORT;
+    delete process.env.IMAP_SECURE;
+    delete process.env.IMAP_USER;
+    delete process.env.IMAP_PASS;
+    delete process.env.IMAP_REJECT_UNAUTHORIZED;
+    delete process.env.SMTP_HOST;
+    delete process.env.SMTP_PORT;
+    delete process.env.SMTP_SECURE;
+    delete process.env.SMTP_USER;
+    delete process.env.SMTP_PASS;
+    delete process.env.SMTP_FROM;
+    delete process.env.SMTP_REJECT_UNAUTHORIZED;
+    delete process.env.LOG_LEVEL;
+    delete process.env.LOG_DIR;
+    delete process.env.AUTH_TOKEN;
+    delete process.env.ALLOWED_DOMAINS;
+    delete process.env.REDACT_LOGS;
+  });
 
   afterEach(() => {
     // Restore env between tests

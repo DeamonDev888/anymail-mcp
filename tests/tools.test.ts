@@ -143,21 +143,45 @@ describe("registerMailTools", () => {
     ]);
   });
 
-  it("send_email passes through to mail service", async () => {
-    mockMail.sendEmail.mockResolvedValue({ messageId: "<abc@id>" });
+  it("send_email sends as HTML when is_html=true", async () => {
+    mockMail.sendEmail.mockResolvedValue({
+      messageId: "<html@id>",
+      sizeBytes: 200,
+    });
     const tool = registerOneTool("send_email");
     const result = await tool.execute({
       to: "a@b.com",
       subject: "Hi",
-      body: "Hello",
+      body: "<h1>Hello</h1>",
+      is_html: true,
+      preview: false,
     });
-    expect(mockMail.sendEmail).toHaveBeenCalledWith("a@b.com", "Hi", "Hello");
-    expect(JSON.parse(result as string)).toEqual({
-      status: "sent",
+    expect(mockMail.sendEmail).toHaveBeenCalledWith(
+      "a@b.com",
+      "Hi",
+      "<h1>Hello</h1>",
+      { isHtml: true, preview: false },
+    );
+    expect(JSON.parse(result as string).is_html).toBe(true);
+  });
+
+  it("send_email preview=true returns size without sending", async () => {
+    mockMail.sendEmail.mockResolvedValue({
+      messageId: "preview",
+      sizeBytes: 11,
+    });
+    const tool = registerOneTool("send_email");
+    const result = await tool.execute({
       to: "a@b.com",
       subject: "Hi",
-      messageId: "<abc@id>",
+      body: "Hello world",
+      is_html: false,
+      preview: true,
     });
+    const parsed = JSON.parse(result as string);
+    expect(parsed.status).toBe("preview");
+    expect(parsed.sizeBytes).toBe(11);
+    expect(parsed.message).toContain("preview=false");
   });
 
   it("reply_email passes through to mail service with threading", async () => {

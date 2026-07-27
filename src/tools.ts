@@ -88,20 +88,35 @@ export function registerMailTools(
 
   addTool({
     name: "read_email",
-    description: "Read a full email by UID (including body).",
+    description:
+      "Read a full email by UID (including body). Default returns preview (first 200 chars) to avoid blowing context. Set full=true to get the entire body.",
     parameters: z.object({
       uid: z.number().int().describe("Email UID"),
       mailbox: z.string().default("INBOX").describe("Mailbox name"),
+      full: z
+        .boolean()
+        .default(false)
+        .describe(
+          "Return the entire body (default: false → preview only, first 200 chars)",
+        ),
     }),
-    execute: async (args: { uid: number; mailbox: string }) => {
+    execute: async (args: { uid: number; mailbox: string; full: boolean }) => {
       if (!isValidMailboxName(args.mailbox)) {
         return JSON.stringify({ error: "Invalid mailbox name" });
       }
-      const email = await mail.readEmail(args.uid, args.mailbox);
+      const email = await mail.readEmail(args.uid, args.mailbox, {
+        preview: !args.full,
+      });
       if (!email) {
         return JSON.stringify({ error: "Email not found" });
       }
-      return JSON.stringify(email);
+      // Add a hint about the full body length when truncated
+      const result: Record<string, unknown> = { ...email };
+      if (args.full === false && email.body.length >= 200) {
+        result.truncated = true;
+        result.note = "Set full=true to retrieve the entire body";
+      }
+      return JSON.stringify(result);
     },
   });
 
@@ -138,13 +153,30 @@ export function registerMailTools(
 
   addTool({
     name: "send_email",
-    description: "Send an email via SMTP.",
+    description:
+      "Send an email via SMTP. Set is_html=true to send HTML body (with inline SVG, images, etc.). Set preview=true to validate the payload size without actually sending.",
     parameters: z.object({
       to: z.string().describe("Recipient email address"),
       subject: z.string().describe("Email subject"),
-      body: z.string().describe("Email body (plain text)"),
+      body: z.string().describe("Email body (plain text or HTML)"),
+      is_html: z
+        .boolean()
+        .default(false)
+        .describe("Treat body as HTML (default: false → plain text)"),
+      preview: z
+        .boolean()
+        .default(false)
+        .describe(
+          "Don't send — just validate the payload and return its size in bytes",
+        ),
     }),
-    execute: async (args: { to: string; subject: string; body: string }) => {
+    execute: async (args: {
+      to: string;
+      subject: string;
+      body: string;
+      is_html: boolean;
+      preview: boolean;
+    }) => {
       // Security: check allowlist policy
       const check = isRecipientAllowed(args.to, policy);
       if (!check.ok) {
@@ -163,11 +195,28 @@ export function registerMailTools(
       // Security: sanitize body (no null bytes, cap length)
       const safeBody = sanitizeBody(args.body);
 
-      const result = await mail.sendEmail(args.to, safeSubject, safeBody);
+      const result = await mail.sendEmail(args.to, safeSubject, safeBody, {
+        isHtml: args.is_html,
+        preview: args.preview,
+      });
+
+      if (args.preview) {
+        return JSON.stringify({
+          status: "preview",
+          to: args.to,
+          subject: safeSubject,
+          is_html: args.is_html,
+          sizeBytes: result.sizeBytes,
+          message: `Payload validated. Pass preview=false to actually send.`,
+        });
+      }
+
       return JSON.stringify({
         status: "sent",
         to: args.to,
         subject: safeSubject,
+        is_html: args.is_html,
+        sizeBytes: result.sizeBytes,
         messageId: result.messageId,
       });
     },

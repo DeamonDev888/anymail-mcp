@@ -179,7 +179,11 @@ export class MailService {
     }
   }
 
-  async readEmail(uid: number, mailbox: string): Promise<EmailFull | null> {
+  async readEmail(
+    uid: number,
+    mailbox: string,
+    options: { preview?: boolean } = {},
+  ): Promise<EmailFull | null> {
     const c = await this.connectImap();
     const lock = await c.getMailboxLock(mailbox);
     try {
@@ -197,10 +201,27 @@ export class MailService {
 
       const m = msg as unknown as { preview?: string };
       const source = msg.source?.toString() || "";
-      const textMatch = source.match(
-        /Content-Type: text\/plain[^\n]*\n(?:[^:\n]+:\n)?\n\n([\s\S]*?)(?=\n\n[A-Z]|\n\n$|$)/,
-      );
-      const body = textMatch ? textMatch[1].trim() : source.substring(0, 2000);
+
+      // Parse MIME body. Try text/plain first, then text/html, then fallback.
+      const decodeMimeBody = (mimeSource: string): string => {
+        const textPlain = mimeSource.match(
+          /Content-Type: text\/plain[^\n]*\n(?:[^:\n]+:\n)?\n\n([\s\S]*?)(?=\n\n[A-Z]|\n\n$|$)/,
+        );
+        if (textPlain) return textPlain[1].trim();
+        const textHtml = mimeSource.match(
+          /Content-Type: text\/html[^\n]*\n(?:[^:\n]+:\n)?\n\n([\s\S]*?)(?=\n\n[A-Z]|\n\n$|$)/,
+        );
+        if (textHtml) return textHtml[1].trim();
+        // Fallback: first 2000 chars of source
+        return mimeSource.substring(0, 2000);
+      };
+
+      const fullBody = decodeMimeBody(source);
+
+      // If preview mode (default), truncate to 200 chars for the body
+      // but also include the preview from the server if available
+      const body =
+        options.preview === false ? fullBody : fullBody.substring(0, 200);
 
       return {
         uid: msg.uid as number,
@@ -209,7 +230,7 @@ export class MailService {
         to: msg.envelope?.to?.map((t) => t.address).join(", "),
         date: msg.envelope?.date?.toISOString(),
         flags: msg.flags ? Array.from(msg.flags) : [],
-        preview: m.preview?.substring(0, 200) || "",
+        preview: m.preview?.substring(0, 200) || fullBody.substring(0, 200),
         body,
       };
     } finally {
@@ -254,16 +275,49 @@ export class MailService {
     to: string,
     subject: string,
     body: string,
-  ): Promise<{ messageId: string }> {
+    options: { isHtml?: boolean; preview?: boolean } = {},
+  ): Promise<{ messageId: string; sizeBytes?: number }> {
+    const isHtml = options.isHtml === true;
+    const preview = options.preview === true;
+
+    // If preview=true, don't actually send — just validate the payload size
+    if (preview) {
+      const estimatedSize = Buffer.byteLength(body, "utf8");
+      this.logger.info(
+        { to, subject, sizeBytes: estimatedSize, isHtml },
+        "Email preview requested (not sent)",
+      );
+      return { messageId: "preview", sizeBytes: estimatedSize };
+    }
+
     const t = this.getSmtp();
-    const info = await t.sendMail({
+    const mailOptions: nodemailer.SendMailOptions = {
       from: this.config.smtpFrom || this.config.smtpUser,
       to,
       subject,
-      text: body,
-    });
-    this.logger.info({ to, subject, messageId: info.messageId }, "Email sent");
-    return { messageId: info.messageId || "" };
+    };
+
+    if (isHtml) {
+      mailOptions.html = body;
+    } else {
+      mailOptions.text = body;
+    }
+
+    const info = await t.sendMail(mailOptions);
+    this.logger.info(
+      {
+        to,
+        subject,
+        messageId: info.messageId,
+        isHtml,
+        sizeBytes: Buffer.byteLength(body, "utf8"),
+      },
+      "Email sent",
+    );
+    return {
+      messageId: info.messageId || "",
+      sizeBytes: Buffer.byteLength(body, "utf8"),
+    };
   }
 
   /**
