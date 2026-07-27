@@ -10,7 +10,7 @@
 - 3 unit tests updated to match the correct imapflow call signatures
 
 ### Verified live
-- Deployed on Stalwart (admin@veridy.ca) — all 9 tools tested via httpStream
+- Deployed on Stalwart — all 9 tools tested via httpStream
 - `read_email UID 60` returns full body (was returning "Email not found")
 - `reply_email` sends with correct `In-Reply-To` + `References` headers
 
