@@ -143,6 +143,99 @@ describe("MailService", () => {
     });
   });
 
+  it("replyEmail reads original then sends reply with threading headers", async () => {
+    const lock = { release: vi.fn() };
+    mockImap.getMailboxLock.mockResolvedValue(lock);
+    mockImap.fetchOne.mockResolvedValue({
+      uid: 42,
+      envelope: {
+        messageId: "orig-message-id",
+        subject: "Original subject",
+        from: [{ address: "sender@example.com" }],
+        to: [{ address: "user@example.com" }],
+        date: new Date("2026-01-01T00:00:00Z"),
+      },
+    });
+
+    const mail = new MailService(fakeConfig, logger);
+    const result = await mail.replyEmail(42, "INBOX", "My reply body");
+
+    // Verify IMAP was called to fetch the original
+    expect(mockImap.fetchOne).toHaveBeenCalledWith(
+      "42",
+      { uid: true, envelope: true, internalDate: true },
+      { uid: true },
+    );
+    expect(lock.release).toHaveBeenCalled();
+
+    // Verify SMTP send had threading headers
+    expect(mockSendMail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        from: "user@example.com",
+        to: "sender@example.com",
+        subject: "Re: Original subject",
+        text: "My reply body",
+        headers: {
+          "In-Reply-To": "<orig-message-id>",
+          "References": "<orig-message-id>",
+        },
+      }),
+    );
+    expect(result.messageId).toBe("<test@id>");
+    expect(result.to).toBe("sender@example.com");
+    expect(result.subject).toBe("Re: Original subject");
+    expect(result.inReplyTo).toBe("orig-message-id");
+  });
+
+  it("replyEmail does not double-prefix subject if it already starts with Re:", async () => {
+    const lock = { release: vi.fn() };
+    mockImap.getMailboxLock.mockResolvedValue(lock);
+    mockImap.fetchOne.mockResolvedValue({
+      uid: 5,
+      envelope: {
+        messageId: "msg-2",
+        subject: "RE: Already prefixed",
+        from: [{ address: "x@y.com" }],
+      },
+    });
+
+    const mail = new MailService(fakeConfig, logger);
+    await mail.replyEmail(5, "INBOX", "Reply");
+
+    expect(mockSendMail).toHaveBeenCalledWith(
+      expect.objectContaining({ subject: "RE: Already prefixed" }),
+    );
+  });
+
+  it("replyEmail throws when original email not found", async () => {
+    const lock = { release: vi.fn() };
+    mockImap.getMailboxLock.mockResolvedValue(lock);
+    mockImap.fetchOne.mockResolvedValue(null);
+
+    const mail = new MailService(fakeConfig, logger);
+    await expect(mail.replyEmail(999, "INBOX", "Reply")).rejects.toThrow(
+      "not found",
+    );
+  });
+
+  it("replyEmail throws when sender cannot be determined", async () => {
+    const lock = { release: vi.fn() };
+    mockImap.getMailboxLock.mockResolvedValue(lock);
+    mockImap.fetchOne.mockResolvedValue({
+      uid: 7,
+      envelope: {
+        messageId: "msg-3",
+        subject: "No from",
+        // from is missing
+      },
+    });
+
+    const mail = new MailService(fakeConfig, logger);
+    await expect(mail.replyEmail(7, "INBOX", "Reply")).rejects.toThrow(
+      "sender",
+    );
+  });
+
   it("markRead adds or removes Seen flag", async () => {
     const lock = { release: vi.fn() };
     mockImap.getMailboxLock.mockResolvedValue(lock);

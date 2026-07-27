@@ -174,6 +174,40 @@ export function registerMailTools(
   });
 
   addTool({
+    name: "reply_email",
+    description:
+      "Reply to an existing email thread. Reads the original email by UID to extract the sender, subject, and Message-ID, then sends a reply with proper threading headers (In-Reply-To, References) and a 'Re:' subject prefix.",
+    parameters: z.object({
+      uid: z.number().int().describe("UID of the email to reply to"),
+      body: z.string().describe("Reply body (plain text)"),
+      mailbox: z
+        .string()
+        .default("INBOX")
+        .describe("Mailbox containing the original email"),
+    }),
+    execute: async (args: { uid: number; body: string; mailbox: string }) => {
+      if (!isValidMailboxName(args.mailbox)) {
+        return JSON.stringify({ error: "Invalid mailbox name" });
+      }
+      // Security: sanitize body
+      const safeBody = sanitizeBody(args.body);
+      try {
+        const result = await mail.replyEmail(args.uid, args.mailbox, safeBody);
+        return JSON.stringify({
+          status: "sent",
+          to: result.to,
+          subject: result.subject,
+          messageId: result.messageId,
+          inReplyTo: result.inReplyTo,
+        });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        return JSON.stringify({ status: "error", error: message });
+      }
+    },
+  });
+
+  addTool({
     name: "mark_read",
     description: "Mark an email as read or unread.",
     parameters: z.object({

@@ -9,6 +9,7 @@ const mockMail = {
   readEmail: vi.fn(),
   searchEmails: vi.fn(),
   sendEmail: vi.fn(),
+  replyEmail: vi.fn(),
   markRead: vi.fn(),
   deleteEmail: vi.fn(),
   close: vi.fn(),
@@ -92,9 +93,9 @@ describe("registerMailTools", () => {
     Object.values(mockMail).forEach((m) => m.mockReset());
   });
 
-  it("registers all 8 tools", () => {
+  it("registers all 9 tools", () => {
     const tools = registerAllTools();
-    expect(tools.length).toBe(8);
+    expect(tools.length).toBe(9);
     const names = tools.map((t) => t.name).sort();
     expect(names).toEqual([
       "delete_email",
@@ -102,6 +103,7 @@ describe("registerMailTools", () => {
       "list_mailboxes",
       "mark_read",
       "read_email",
+      "reply_email",
       "search_emails",
       "send_email",
       "server_info",
@@ -155,6 +157,43 @@ describe("registerMailTools", () => {
       to: "a@b.com",
       subject: "Hi",
       messageId: "<abc@id>",
+    });
+  });
+
+  it("reply_email passes through to mail service with threading", async () => {
+    mockMail.replyEmail.mockResolvedValue({
+      messageId: "<reply@id>",
+      to: "a@b.com",
+      subject: "Re: Original",
+      inReplyTo: "<orig@id>",
+    });
+    const tool = registerOneTool("reply_email");
+    const result = await tool.execute({
+      uid: 42,
+      body: "My reply",
+      mailbox: "INBOX",
+    });
+    expect(mockMail.replyEmail).toHaveBeenCalledWith(42, "INBOX", "My reply");
+    expect(JSON.parse(result as string)).toEqual({
+      status: "sent",
+      to: "a@b.com",
+      subject: "Re: Original",
+      messageId: "<reply@id>",
+      inReplyTo: "<orig@id>",
+    });
+  });
+
+  it("reply_email returns error JSON on failure", async () => {
+    mockMail.replyEmail.mockRejectedValue(new Error("UID not found"));
+    const tool = registerOneTool("reply_email");
+    const result = await tool.execute({
+      uid: 999,
+      body: "Reply",
+      mailbox: "INBOX",
+    });
+    expect(JSON.parse(result as string)).toEqual({
+      status: "error",
+      error: "UID not found",
     });
   });
 

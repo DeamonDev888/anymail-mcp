@@ -266,6 +266,84 @@ export class MailService {
     return { messageId: info.messageId || "" };
   }
 
+  /**
+   * Reply to an existing email. Reads the original by UID to extract
+   * Message-ID, From address, and Subject, then sends a reply with proper
+   * threading headers (In-Reply-To, References) and "Re:" subject prefix.
+   *
+   * Returns the SMTP Message-ID of the reply.
+   */
+  async replyEmail(
+    uid: number,
+    mailbox: string,
+    body: string,
+  ): Promise<{ messageId: string; to: string; subject: string; inReplyTo: string | null }> {
+    // 1. Read the original email to extract threading headers
+    const c = await this.connectImap();
+    const lock = await c.getMailboxLock(mailbox);
+    let originalMsgId: string | undefined;
+    let originalFrom: string | undefined;
+    let originalSubject: string | undefined;
+
+    try {
+      const msg = await c.fetchOne(
+        String(uid),
+        { uid: true, envelope: true, internalDate: true },
+        { uid: true },
+      );
+      if (!msg) throw new Error(`Email UID ${uid} not found in ${mailbox}`);
+      originalMsgId = msg.envelope?.messageId;
+      originalFrom = msg.envelope?.from?.[0]?.address;
+      originalSubject = msg.envelope?.subject;
+    } finally {
+      lock.release();
+    }
+
+    if (!originalFrom) {
+      throw new Error("Could not determine original sender address");
+    }
+
+    // 2. Build the reply subject with Re: prefix
+    let replySubject = originalSubject || "";
+    if (!replySubject.toLowerCase().startsWith("re:")) {
+      replySubject = "Re: " + replySubject;
+    }
+
+    // 3. Send the reply with threading headers
+    const t = this.getSmtp();
+    const mailOptions: nodemailer.SendMailOptions = {
+      from: this.config.smtpFrom || this.config.smtpUser,
+      to: originalFrom,
+      subject: replySubject,
+      text: body,
+    };
+    if (originalMsgId) {
+      (mailOptions as never as { headers: Record<string, string> }).headers = {
+        "In-Reply-To": `<${originalMsgId}>`,
+        "References": `<${originalMsgId}>`,
+      };
+    }
+    const info = await t.sendMail(mailOptions);
+
+    this.logger.info(
+      {
+        uid,
+        to: originalFrom,
+        subject: replySubject,
+        messageId: info.messageId,
+        inReplyTo: originalMsgId,
+      },
+      "Reply sent",
+    );
+
+    return {
+      messageId: info.messageId || "",
+      to: originalFrom,
+      subject: replySubject,
+      inReplyTo: originalMsgId || null,
+    };
+  }
+
   async markRead(uid: number, mailbox: string, read: boolean): Promise<void> {
     const c = await this.connectImap();
     const lock = await c.getMailboxLock(mailbox);
